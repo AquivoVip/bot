@@ -1,100 +1,74 @@
 import os
 import time
-import asyncio
-import aiohttp
-from datetime import datetime
-from telegram import Bot
+import requests
 from bs4 import BeautifulSoup
-import logging
-
-# Logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# Variáveis do ambiente
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-CANAL_1_ID = int(os.getenv("CANAL_1_ID"))
-CANAL_2_ID = int(os.getenv("CANAL_2_ID"))
-
-bot = Bot(token=BOT_TOKEN)
+from telegram import Bot
 
 # Configurações
-URL_SITE = "https://fxggxt.com/"
-HEADERS = {"User-Agent": "Mozilla/5.0"}
-INTERVALO = 600  # 10 min
-HORAS_ATIVAS = list(range(13, 24)) + list(range(0, 5))
-HISTORICO = set()
+TOKEN = os.getenv("TELEGRAM_TOKEN")
+CANAL_1 = "-1002816936225"  # Arquivo vip🖤
+CANAL_2 = "-1002840999372"  # World
+POSTAGENS = {}
 
-async def baixar(session, url, caminho):
-    try:
-        async with session.get(url) as r:
-            if r.status == 200:
-                with open(caminho, 'wb') as f:
-                    f.write(await r.read())
-                return True
-    except Exception as e:
-        logger.error(f"Erro ao baixar {url}: {e}")
-    return False
+bot = Bot(token=TOKEN)
 
-async def extrair_videos():
-    try:
-        async with aiohttp.ClientSession(headers=HEADERS) as s:
-            async with s.get(URL_SITE) as r:
-                html = await r.text()
-                soup = BeautifulSoup(html, 'html.parser')
-                return [
-                    a['href'] for a in soup.find_all('a', href=True)
-                    if '/video/' in a['href'] and a['href'] not in HISTORICO
-                ]
-    except Exception as e:
-        logger.error(f"Erro ao extrair vídeos: {e}")
-        return []
+def get_videos_site():
+    url = "https://fxggxt.com"
+    headers = {"User-Agent": "Mozilla/5.0"}
+    response = requests.get(url, headers=headers)
+    soup = BeautifulSoup(response.text, "html.parser")
+    videos = soup.select(".video-block a.video-image")
+    return [("https://fxggxt.com" + v.get("href")) for v in videos if v.get("href")]
 
-async def postar_video(video_url):
-    try:
-        titulo = video_url.split('/')[-1].replace('-', ' ').replace('.html', '').title()
-        url_completo = f"{URL_SITE.rstrip('/')}{video_url}"
-        thumb_path = f"thumb_{int(time.time())}.jpg"
-        video_path = f"video_{int(time.time())}.mp4"
+def get_video_details(link):
+    res = requests.get(link)
+    soup = BeautifulSoup(res.text, "html.parser")
+    title = soup.select_one("h1").text.strip()
+    video_url = soup.select_one("video source").get("src")
+    thumb = soup.select_one("video").get("poster")
+    return title, video_url, thumb
 
-        async with aiohttp.ClientSession(headers=HEADERS) as s:
-            async with s.get(url_completo) as r:
-                html = await r.text()
-                try:
-                    thumb = html.split('poster="')[1].split('"')[0]
-                    video = html.split('src="')[1].split('"')[0]
-                except:
-                    return
+def enviar_para_canal(chat_id, title, video_url, thumb, legenda_extra=""):
+    caption = f"{title}\n▬▬▬▬▬▬▬▬▬▬▬▬▬\n{legenda_extra}".strip()
+    bot.send_video(
+        chat_id=chat_id,
+        video=video_url,
+        caption=caption,
+        thumb=thumb,
+        supports_streaming=True
+    )
 
-                if not await baixar(s, thumb, thumb_path): return
-                if not await baixar(s, video, video_path): return
-
-        # CANAL 1
-        await bot.send_photo(chat_id=CANAL_1_ID, photo=open(thumb_path, 'rb'), caption=titulo)
-        await asyncio.sleep(180)
-        await bot.send_video(chat_id=CANAL_1_ID, video=open(video_path, 'rb'))
-
-        # CANAL 2 (24h depois)
-        await asyncio.sleep(86400 - 180)
-        await bot.send_photo(chat_id=CANAL_2_ID, photo=open(thumb_path, 'rb'), caption=f"{titulo}\n▬▬▬▬▬▬▬▬▬▬▬▬▬\n🦋 @ArquivoVIPcentral 🔞")
-        await asyncio.sleep(180)
-        await bot.send_video(chat_id=CANAL_2_ID, video=open(video_path, 'rb'), caption="💳  @ComboCompletoBot")
-
-        HISTORICO.add(video_url)
-        os.remove(thumb_path)
-        os.remove(video_path)
-
-    except Exception as e:
-        logger.error(f"Erro ao postar {video_url}: {e}")
-
-async def executar():
+def main():
     while True:
-        hora = datetime.now().hour
-        if hora in HORAS_ATIVAS:
-            novos = await extrair_videos()
-            for url in novos:
-                await postar_video(url)
-        await asyncio.sleep(INTERVALO)
+        try:
+            links = get_videos_site()
+            for link in links:
+                if link not in POSTAGENS:
+                    title, video_url, thumb = get_video_details(link)
 
-if __name__ == '__main__':
-    asyncio.run(executar())
+                    # Primeira postagem (imediata)
+                    enviar_para_canal(CANAL_1, title, video_url, thumb)
+
+                    # Segunda postagem (agendada 24h depois)
+                    POSTAGENS[link] = {
+                        "time": time.time(),
+                        "title": title,
+                        "video_url": video_url,
+                        "thumb": thumb
+                    }
+
+            # Verifica vídeos agendados para postar no segundo canal
+            agora = time.time()
+            for link, info in list(POSTAGENS.items()):
+                if agora - info["time"] >= 86400:
+                    legenda = "🦋 @ArquivoVIPcentral 🔞"
+                    enviar_para_canal(CANAL_2, info["title"], info["video_url"], info["thumb"], legenda)
+                    del POSTAGENS[link]
+
+        except Exception as e:
+            print(f"[ERRO] {e}")
+        
+        time.sleep(300)  # Espera 5 minutos antes de repetir
+
+if __name__ == "__main__":
+    main()
