@@ -1,33 +1,31 @@
-from telegram import Bot, Update
-from telegram.ext import Updater, CommandHandler, CallbackContext
+import os
 import logging
+from telegram import Update
+from telegram.ext import Application, CommandHandler, ContextTypes
+from dotenv import load_dotenv
 
-# TOKEN DIRETO (você autorizou usar assim para testes)
-TOKEN = "7859249744:AAEBSoSq0w_u_y2sVdIKnNs4l40VJrNsCZKU"
+# Carregar variáveis do .env
+load_dotenv()
+TOKEN = os.getenv("BOT_TOKEN")
 
-# Configurar o log para facilitar depuração
+# Configurar logs
 logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# Função de resposta ao comando /start
-def start(update: Update, context: CallbackContext):
-    update.message.reply_text("Olá! Eu sou o seu bot, pronto para funcionar!")
+# Comando /start
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Olá! Eu sou o seu bot, pronto para funcionar!")
 
-# Função principal que inicializa o bot
+# Função principal
 def main():
-    # Cria o bot e o updater
-    updater = Updater(token=TOKEN, use_context=True)
-    dispatcher = updater.dispatcher
+    app = Application.builder().token(TOKEN).build()
 
-    # Adiciona o comando /start
-    dispatcher.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("start", start))
 
-    # Inicia o bot
-    updater.start_polling()
-    updater.idle()
+    logger.info("Bot iniciado com sucesso.")
+    app.run_polling()
 
-# Executa o bot
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
