@@ -5,7 +5,7 @@ from bs4 import BeautifulSoup
 from telegram import Bot
 
 # Configurações
-TOKEN = os.getenv("BOT_TOKEN")
+TOKEN = os.getenv("BOT_TOKEN")  # Token do bot vindo das variáveis da Railway
 CANAL_1 = "-1002816936225"  # Arquivo vip🖤
 CANAL_2 = "-1002840999372"  # World
 POSTAGENS = {}
