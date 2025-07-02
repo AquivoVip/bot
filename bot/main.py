@@ -1,58 +1,33 @@
-import os
-import time
-import requests
-from bs4 import BeautifulSoup
-from telegram import Bot
+from telegram import Bot, Update
+from telegram.ext import Updater, CommandHandler, CallbackContext
+import logging
 
-# Configurações
-TOKEN = os.getenv("BOT_TOKEN")  # Token do bot vindo das variáveis da Railway
-CANAL_1 = "-1002816936225"  # Arquivo vip🖤
-CANAL_2 = "-1002840999372"  # World
-POSTAGENS = {}
+# TOKEN DIRETO (você autorizou usar assim para testes)
+TOKEN = "7859249744:AAEBSoSq0w_u_y2sVdIKnNs4l40VJrNsCZKU"
 
-bot = Bot(token=TOKEN)
+# Configurar o log para facilitar depuração
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
-def get_videos_site():
-    url = "https://fxggxt.com"
-    headers = {"User-Agent": "Mozilla/5.0"}
-    response = requests.get(url, headers=headers)
-    soup = BeautifulSoup(response.content, "html.parser")
-    videos = soup.select("div.item")
-    novos_videos = []
+# Função de resposta ao comando /start
+def start(update: Update, context: CallbackContext):
+    update.message.reply_text("Olá! Eu sou o seu bot, pronto para funcionar!")
 
-    for video in videos:
-        link_tag = video.select_one("a")
-        title_tag = video.select_one("h3")
-        img_tag = video.select_one("img")
-
-        if link_tag and title_tag and img_tag:
-            link = link_tag["href"]
-            titulo = title_tag.text.strip()
-            img = img_tag["src"]
-
-            if titulo not in POSTAGENS:
-                POSTAGENS[titulo] = True
-                novos_videos.append((titulo, link, img))
-
-    return novos_videos
-
-def postar_nos_canais(videos):
-    for titulo, link, img in videos:
-        try:
-            texto = f"{titulo}\n🔗 {link}"
-            bot.send_photo(chat_id=CANAL_1, photo=img, caption=texto)
-            time.sleep(2)
-            bot.send_photo(chat_id=CANAL_2, photo=img, caption=texto)
-        except Exception as e:
-            print(f"Erro ao postar: {e}")
-
+# Função principal que inicializa o bot
 def main():
-    while True:
-        print("Verificando novos vídeos...")
-        novos_videos = get_videos_site()
-        if novos_videos:
-            postar_nos_canais(novos_videos)
-        time.sleep(1800)  # Espera 30 minutos
+    # Cria o bot e o updater
+    updater = Updater(token=TOKEN, use_context=True)
+    dispatcher = updater.dispatcher
 
-if __name__ == "__main__":
+    # Adiciona o comando /start
+    dispatcher.add_handler(CommandHandler("start", start))
+
+    # Inicia o bot
+    updater.start_polling()
+    updater.idle()
+
+# Executa o bot
+if __name__ == '__main__':
     main()
