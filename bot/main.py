@@ -4,10 +4,9 @@ import asyncio
 import aiohttp
 from bs4 import BeautifulSoup
 from telegram import Bot
-from telegram.ext import ApplicationBuilder
 from dotenv import load_dotenv
 
-# Carrega variáveis de ambiente da Railway
+# Carregar variáveis de ambiente da Railway
 load_dotenv()
 TOKEN = os.getenv("TOKEN")
 CANAL_PRINCIPAL = os.getenv("CANAL_PRINCIPAL")
@@ -19,6 +18,9 @@ logging.basicConfig(
     level=logging.INFO
 )
 
+# Instanciar o bot global
+bot = Bot(token=TOKEN)
+
 # Variável para controlar últimos links postados
 ULTIMO_LINK = None
 
@@ -26,7 +28,7 @@ ULTIMO_LINK = None
 async def buscar_videos_novos():
     global ULTIMO_LINK
     url = "https://fxggxt.com"
-    
+
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as resposta:
             html = await resposta.text()
@@ -46,23 +48,24 @@ async def buscar_videos_novos():
                         if img_tag and img_tag.get("src"):
                             img_url = img_tag["src"]
                             await enviar_para_canais(titulo, link, img_url)
-                    break  # Só envia o mais recente
+                    break  # Envia apenas o vídeo mais recente
 
-# Envia a mensagem para os canais
+# Envia o vídeo para os canais
 async def enviar_para_canais(titulo, link, img_url):
-    bot = Bot(token=TOKEN)
     legenda = f"🔥 {titulo}\n\n🔗 {link}"
 
     try:
-        # Enviar imediatamente no canal principal
+        # Enviar para o canal principal agora
         await bot.send_photo(chat_id=CANAL_PRINCIPAL, photo=img_url, caption=legenda)
+        logging.info("Enviado ao canal principal com sucesso.")
 
-        # Espera 24h (em segundos) para repostar no canal secundário
+        # Aguardar 24 horas e enviar para o canal secundário
         await asyncio.sleep(86400)
         await bot.send_photo(chat_id=CANAL_SECUNDARIO, photo=img_url, caption=legenda)
+        logging.info("Enviado ao canal secundário com sucesso.")
 
     except Exception as e:
-        logging.error(f"Erro ao enviar: {e}")
+        logging.error(f"Erro ao enviar para os canais: {e}")
 
 # Loop contínuo que verifica novos vídeos a cada 5 minutos
 async def monitorar_site():
@@ -73,7 +76,6 @@ async def monitorar_site():
             logging.error(f"Erro no monitoramento: {e}")
         await asyncio.sleep(300)  # Espera 5 minutos
 
-# Inicializar bot
+# Iniciar o monitoramento
 if __name__ == "__main__":
-    app = ApplicationBuilder().token(TOKEN).build()
     asyncio.run(monitorar_site())
