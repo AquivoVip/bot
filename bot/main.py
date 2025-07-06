@@ -1,33 +1,38 @@
-from telegram import Bot, Update
-from telegram.ext import Updater, CommandHandler, CallbackContext
+import os
 import logging
-
-# TOKEN DIRETO (você autorizou usar assim para testes)
-TOKEN = "7859249744:AAEBSoSq0w_u_y2sVdIKnNs4l40VJrNsCZKU"
-
-# Configurar o log para facilitar depuração
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
+from telegram import Update
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    ContextTypes,
 )
-logger = logging.getLogger(__name__)
+from dotenv import load_dotenv
 
-# Função de resposta ao comando /start
-def start(update: Update, context: CallbackContext):
-    update.message.reply_text("Olá! Eu sou o seu bot, pronto para funcionar!")
+# Carregar variáveis do .env
+load_dotenv()
+TOKEN = os.getenv("BOT_TOKEN")
+CANAL_1_ID = os.getenv("CANAL_1_ID")
+CANAL_2_ID = os.getenv("CANAL_2_ID")
 
-# Função principal que inicializa o bot
-def main():
-    # Cria o bot e o updater
-    updater = Updater(token=TOKEN, use_context=True)
-    dispatcher = updater.dispatcher
+# Ativar logs
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO
+)
 
-    # Adiciona o comando /start
-    dispatcher.add_handler(CommandHandler("start", start))
+# Comando /start
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("✅ O bot está funcionando!")
 
-    # Inicia o bot
-    updater.start_polling()
-    updater.idle()
+# Função principal
+async def main():
+    app = ApplicationBuilder().token(TOKEN).build()
 
-# Executa o bot
-if __name__ == '__main__':
-    main()
+    app.add_handler(CommandHandler("start", start))
+
+    print("✅ Bot iniciado com sucesso!")
+    await app.run_polling()
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(main())
