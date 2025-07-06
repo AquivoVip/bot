@@ -1,80 +1,21 @@
 import os
-import time
-import requests
-from dotenv import load_dotenv
 from telegram import Bot
-from telegram.error import TelegramError
+from telegram.ext import ApplicationBuilder, CommandHandler
+from dotenv import load_dotenv
 
 load_dotenv()
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-CANAL_1_ID = os.getenv("CANAL_1_ID")
-CANAL_2_ID = os.getenv("CANAL_2_ID")
+TOKEN = os.getenv("TOKEN")
 
-bot = Bot(token=BOT_TOKEN)
-SITE_URL = "https://fxggxt.com/wp-json/wp/v2/posts"
+async def start(update, context):
+    await update.message.reply_text("Bot iniciado com sucesso!")
 
-def baixar_video(link, nome_arquivo):
-    try:
-        resposta = requests.get(link, timeout=15)
-        with open(nome_arquivo, "wb") as f:
-            f.write(resposta.content)
-        return True
-    except Exception as e:
-        print(f"Erro ao baixar vídeo: {e}")
-        return False
+def main():
+    application = ApplicationBuilder().token(TOKEN).build()
 
-def pegar_posts():
-    try:
-        resposta = requests.get(SITE_URL, timeout=10)
-        if resposta.status_code == 200:
-            return resposta.json()
-        else:
-            print("Erro ao acessar o site")
-            return []
-    except:
-        return []
+    application.add_handler(CommandHandler("start", start))
 
-def extrair_link(post):
-    try:
-        return post["jetpack_featured_media_url"]
-    except:
-        return None
+    application.run_polling()
 
-async def publicar(canal_id, caminho_video, legenda):
-    try:
-        with open(caminho_video, "rb") as video:
-            await bot.send_video(chat_id=canal_id, video=video, caption=legenda)
-        print(f"Publicado em {canal_id}")
-    except TelegramError as e:
-        print(f"Erro ao publicar: {e}")
-
-import asyncio
-
-async def main():
-    print("Bot iniciado...")
-    posts_ja_postados = set()
-
-    while True:
-        posts = pegar_posts()
-
-        for post in posts:
-            link_video = extrair_link(post)
-            if not link_video or link_video in posts_ja_postados:
-                continue
-
-            nome_arquivo = "video.mp4"
-            legenda = post["title"]["rendered"]
-
-            if baixar_video(link_video, nome_arquivo):
-                await publicar(CANAL_1_ID, nome_arquivo, legenda)
-                await asyncio.sleep(5)  # ou 86400 para 24 horas
-                await publicar(CANAL_2_ID, nome_arquivo, legenda)
-
-                posts_ja_postados.add(link_video)
-                os.remove(nome_arquivo)
-
-        await asyncio.sleep(1800)
-
-if __name__ == "__main__":
-    asyncio.run(main())
+if __name__ == '__main__':
+    main()
