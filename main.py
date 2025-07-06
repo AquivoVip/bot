@@ -2,7 +2,7 @@ import os
 import time
 import requests
 from dotenv import load_dotenv
-from telegram import Bot, InputMediaVideo
+from telegram import Bot
 from telegram.error import TelegramError
 
 load_dotenv()
@@ -41,15 +41,17 @@ def extrair_link(post):
     except:
         return None
 
-def publicar(canal_id, caminho_video, legenda):
+async def publicar(canal_id, caminho_video, legenda):
     try:
         with open(caminho_video, "rb") as video:
-            bot.send_video(chat_id=canal_id, video=video, caption=legenda)
+            await bot.send_video(chat_id=canal_id, video=video, caption=legenda)
         print(f"Publicado em {canal_id}")
     except TelegramError as e:
         print(f"Erro ao publicar: {e}")
 
-def main():
+import asyncio
+
+async def main():
     print("Bot iniciado...")
     posts_ja_postados = set()
 
@@ -65,16 +67,14 @@ def main():
             legenda = post["title"]["rendered"]
 
             if baixar_video(link_video, nome_arquivo):
-                publicar(CANAL_1_ID, nome_arquivo, legenda)
-
-                # Espera 24 horas antes de postar no segundo canal
-                time.sleep(5)  # coloque 86400 para 24h reais
-                publicar(CANAL_2_ID, nome_arquivo, legenda)
+                await publicar(CANAL_1_ID, nome_arquivo, legenda)
+                await asyncio.sleep(5)  # ou 86400 para 24 horas
+                await publicar(CANAL_2_ID, nome_arquivo, legenda)
 
                 posts_ja_postados.add(link_video)
                 os.remove(nome_arquivo)
 
-        time.sleep(1800)  # espera 30 minutos antes de verificar novamente
+        await asyncio.sleep(1800)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
