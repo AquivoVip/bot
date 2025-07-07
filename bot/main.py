@@ -2,30 +2,28 @@ import os
 import logging
 import asyncio
 import aiohttp
+import re
 from bs4 import BeautifulSoup
 from telegram import Bot
+from telegram.constants import ParseMode
 from dotenv import load_dotenv
 
-# Carregar variáveis de ambiente da Railway
+# Carrega variáveis do ambiente
 load_dotenv()
 TOKEN = os.getenv("TOKEN")
 CANAL_PRINCIPAL = os.getenv("CANAL_PRINCIPAL")
 CANAL_SECUNDARIO = os.getenv("CANAL_SECUNDARIO")
 
-# Ativar logs
+# Logger configurado
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
 
-# Instanciar o bot global
-bot = Bot(token=TOKEN)
-
-# Variável para controlar últimos links postados
+# Controlador de links
 ULTIMO_LINK = None
 
-# Função para buscar os vídeos do site
-async def buscar_videos_novos():
+async def buscar_video_novo():
     global ULTIMO_LINK
     url = "https://fxggxt.com"
 
@@ -37,45 +35,46 @@ async def buscar_videos_novos():
 
             for card in cards:
                 link_tag = card.find("a")
-                if link_tag:
-                    link = "https://fxggxt.com" + link_tag["href"]
-                    if link != ULTIMO_LINK:
-                        ULTIMO_LINK = link
-                        titulo = link_tag.get("title", "Novo vídeo")
+                if not link_tag:
+                    continue
+                link = "https://fxggxt.com" + link_tag["href"]
+                if link == ULTIMO_LINK:
+                    break
 
-                        # Baixa a imagem de capa
-                        img_tag = card.find("img")
-                        if img_tag and img_tag.get("src"):
-                            img_url = img_tag["src"]
-                            await enviar_para_canais(titulo, link, img_url)
-                    break  # Envia apenas o vídeo mais recente
+                ULTIMO_LINK = link
+                titulo = link_tag.get("title", "Novo vídeo")
 
-# Envia o vídeo para os canais
-async def enviar_para_canais(titulo, link, img_url):
-    legenda = f"🔥 {titulo}\n\n🔗 {link}"
+                img_tag = card.find("img")
+                img_url = img_tag["src"] if img_tag else None
 
+                nomes_modelos = extrair_modelos(titulo)
+                legenda_img = f"{titulo}\nOnlyFans – {nomes_modelos}\n\n🦋 @ArquivoVIPcentral 🔞"
+                legenda_video = "⎯ @ComboCompletoBot"
+
+                if img_url:
+                    await postar_conteudo(img_url, link, legenda_img, legenda_video)
+                break
+
+def extrair_modelos(titulo):
+    nomes = re.findall(r"–\s(.+)", titulo)
+    return nomes[0] if nomes else "Modelos desconhecidos"
+
+async def postar_conteudo(img_url, video_url, legenda_img, legenda_video):
+    bot = Bot(token=TOKEN)
     try:
-        # Enviar para o canal principal agora
-        await bot.send_photo(chat_id=CANAL_PRINCIPAL, photo=img_url, caption=legenda)
-        logging.info("Enviado ao canal principal com sucesso.")
-
-        # Aguardar 24 horas e enviar para o canal secundário
+        await bot.send_photo(chat_id=CANAL_PRINCIPAL, photo=img_url, caption=legenda_img, parse_mode=ParseMode.HTML)
         await asyncio.sleep(86400)
-        await bot.send_photo(chat_id=CANAL_SECUNDARIO, photo=img_url, caption=legenda)
-        logging.info("Enviado ao canal secundário com sucesso.")
-
+        await bot.send_video(chat_id=CANAL_SECUNDARIO, video=video_url, caption=legenda_video, parse_mode=ParseMode.HTML)
     except Exception as e:
-        logging.error(f"Erro ao enviar para os canais: {e}")
+        logging.error(f"Erro ao enviar conteúdo: {e}")
 
-# Loop contínuo que verifica novos vídeos a cada 5 minutos
-async def monitorar_site():
+async def iniciar_monitoramento():
     while True:
         try:
-            await buscar_videos_novos()
+            await buscar_video_novo()
         except Exception as e:
             logging.error(f"Erro no monitoramento: {e}")
-        await asyncio.sleep(300)  # Espera 5 minutos
+        await asyncio.sleep(300)
 
-# Iniciar o monitoramento
 if __name__ == "__main__":
-    asyncio.run(monitorar_site())
+    asyncio.run(iniciar_monitoramento())
