@@ -1,80 +1,99 @@
 import os
-import logging
 import asyncio
 import aiohttp
-import re
 from bs4 import BeautifulSoup
 from telegram import Bot
 from telegram.constants import ParseMode
 from dotenv import load_dotenv
+from datetime import datetime, timedelta
+import re
+import logging
+import time
 
-# Carrega variáveis do ambiente
 load_dotenv()
+
 TOKEN = os.getenv("TOKEN")
 CANAL_PRINCIPAL = os.getenv("CANAL_PRINCIPAL")
 CANAL_SECUNDARIO = os.getenv("CANAL_SECUNDARIO")
 
-# Logger configurado
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO
-)
+bot = Bot(token=TOKEN)
 
-# Controlador de links
-ULTIMO_LINK = None
+# Armazena vídeos já postados
+postados = set()
 
-async def buscar_video_novo():
-    global ULTIMO_LINK
-    url = "https://fxggxt.com"
-
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as resposta:
-            html = await resposta.text()
-            soup = BeautifulSoup(html, "html.parser")
-            cards = soup.select(".gridItem")
-
-            for card in cards:
-                link_tag = card.find("a")
-                if not link_tag:
-                    continue
-                link = "https://fxggxt.com" + link_tag["href"]
-                if link == ULTIMO_LINK:
-                    break
-
-                ULTIMO_LINK = link
-                titulo = link_tag.get("title", "Novo vídeo")
-
-                img_tag = card.find("img")
-                img_url = img_tag["src"] if img_tag else None
-
-                nomes_modelos = extrair_modelos(titulo)
-                legenda_img = f"{titulo}\nOnlyFans – {nomes_modelos}\n\n🦋 @ArquivoVIPcentral 🔞"
-                legenda_video = "⎯ @ComboCompletoBot"
-
-                if img_url:
-                    await postar_conteudo(img_url, link, legenda_img, legenda_video)
-                break
-
-def extrair_modelos(titulo):
-    nomes = re.findall(r"–\s(.+)", titulo)
-    return nomes[0] if nomes else "Modelos desconhecidos"
-
-async def postar_conteudo(img_url, video_url, legenda_img, legenda_video):
-    bot = Bot(token=TOKEN)
+# Padrão de identificação da thumb e título
+def extrair_info(soup):
     try:
-        await bot.send_photo(chat_id=CANAL_PRINCIPAL, photo=img_url, caption=legenda_img, parse_mode=ParseMode.HTML)
-        await asyncio.sleep(86400)
-        await bot.send_video(chat_id=CANAL_SECUNDARIO, video=video_url, caption=legenda_video, parse_mode=ParseMode.HTML)
-    except Exception as e:
-        logging.error(f"Erro ao enviar conteúdo: {e}")
+        primeiro = soup.select_one("div.grid > a")
+        if not primeiro:
+            return None
 
-async def iniciar_monitoramento():
+        link = "https://fxggxt.com" + primeiro.get("href")
+        titulo = primeiro.select_one("div.content h3").text.strip()
+        modelos = primeiro.select_one("div.content span").text.strip()
+        img_url = primeiro.select_one("img").get("data-src")
+
+        return {
+            "link": link,
+            "titulo": titulo,
+            "modelos": modelos,
+            "img_url": img_url
+        }
+    except Exception as e:
+        print("Erro ao extrair info:", e)
+        return None
+
+# Função principal
+async def monitorar_site():
     while True:
         try:
-            await buscar_video_novo()
+            async with aiohttp.ClientSession() as session:
+                async with session.get("https://fxggxt.com/") as resp:
+                    html = await resp.text()
+                    soup = BeautifulSoup(html, "html.parser")
+                    dados = extrair_info(soup)
+
+                    if dados and dados["link"] not in postados:
+                        postados.add(dados["link"])
+                        print(f"Novo conteúdo: {dados['titulo']}")
+
+                        # Baixa a imagem
+                        async with session.get(dados["img_url"]) as img_resp:
+                            img_bytes = await img_resp.read()
+
+                        # Envia a imagem com legenda no canal principal
+                        legenda = f"{dados['titulo']}\nOnlyFans – {dados['modelos']}\n\n🦋 @ArquivoVIPcentral 🔞"
+                        await bot.send_photo(
+                            chat_id=CANAL_PRINCIPAL,
+                            photo=img_bytes,
+                            caption=legenda,
+                            parse_mode=ParseMode.HTML
+                        )
+
+                        # Espera alguns segundos e baixa o vídeo
+                        async with session.get(dados["link"]) as video_page:
+                            html_video = await video_page.text()
+                            soup_video = BeautifulSoup(html_video, "html.parser")
+                            source = soup_video.select_one("video source")
+                            if source:
+                                video_url = source.get("src")
+
+                                async with session.get(video_url) as video_resp:
+                                    video_bytes = await video_resp.read()
+
+                                # Espera 24 horas para postar no canal secundário
+                                await asyncio.sleep(86400)  # 24h = 86400s
+
+                                await bot.send_video(
+                                    chat_id=CANAL_SECUNDARIO,
+                                    video=video_bytes,
+                                    caption="⎯ @ComboCompletoBot"
+                                )
+
         except Exception as e:
             logging.error(f"Erro no monitoramento: {e}")
-        await asyncio.sleep(300)
+
+        await asyncio.sleep(300)  # Espera 5 minutos para verificar novamente
 
 if __name__ == "__main__":
-    asyncio.run(iniciar_monitoramento())
+    asyncio.run(monitorar_site())
